@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"flag"
@@ -46,19 +46,28 @@ type Command struct {
 	Flags       *flag.FlagSet
 }
 
-// Register a subcommand
-func (c *Command) Register(name, usageStr, description string, callback CommandFunc) *Command {
-	subCommand := &Command{
+// New will return a fully initialized command object
+func New(name, usageStr, description string, callback CommandFunc) *Command {
+	return &Command{
 		name:        name,
 		usageStr:    usageStr,
 		description: description,
 		callback:    callback,
 		subCommands: make(map[string]*Command),
-		out:         c.out,
 		Flags:       flag.NewFlagSet(name, flag.ExitOnError),
 	}
+}
+
+// Register a subcommand
+func (c *Command) Register(name, usageStr, description string, callback CommandFunc) *Command {
+	subCommand := New(name, usageStr, description, callback)
+	subCommand.Flags.SetOutput(c.out)
 	c.subCommands[name] = subCommand
 	return subCommand
+}
+
+func (c *Command) SetOut(writer io.Writer) {
+	c.out = writer
 }
 
 func (c *Command) usage() {
@@ -95,6 +104,7 @@ func (c *Command) usage() {
 			}
 			indent := fmt.Sprintf("%s%s  ", strings.Repeat(" ", maxNameLen), c.indent)
 			command.indent = indent
+			command.out = c.out
 			command.usage()
 		}
 		fmt.Fprintf(c.out, "\n")
