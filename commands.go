@@ -25,8 +25,14 @@ func (f flagWriter) Write(p []byte) (n int, err error) {
 }
 
 // CommandFunc is the callback function that will be executed when a
-// command is called
-type CommandFunc func(args []string, subCommand *Command) error
+// command is called. Next should be called by the command when the
+// next command (sub-command) should be called. next() will return
+// once the sub-command chain has completed. This allows setup and
+// teardown for sub-commands
+type CommandFunc func(args []string, next NextFunc) error
+
+// NextFunc will execute the next command in a chain of subcommands
+type NextFunc func() error
 
 // Command represents a single cli command. The idea is that a cli app
 // is run such as:
@@ -66,7 +72,8 @@ func (c *Command) Register(name, usageStr, description string, callback CommandF
 	return subCommand
 }
 
-func (c *Command) SetOut(writer io.Writer) {
+// SetOutput will set the io.Writer used for printing usage
+func (c *Command) SetOutput(writer io.Writer) {
 	c.out = writer
 }
 
@@ -79,7 +86,7 @@ func (c *Command) usage() {
 		}
 		commandNames = append(commandNames, name)
 	}
-	nameFmt := fmt.Sprintf("%s%%%ds %%s\n", c.indent, maxNameLen)
+	nameFmt := fmt.Sprintf("%s%%-%ds %%s\n", c.indent, maxNameLen)
 	sort.Strings(commandNames)
 
 	if c.indent == "" {
@@ -112,11 +119,11 @@ func (c *Command) usage() {
 }
 
 // Run the command. The first argument is the command that will
-// be looked up in the list of subcommands. If found, the corresponding
-// CommandFunc will be called with the next command (subcommand) that needs
-// to be called. This allows a chaining effect for the commands so that
-// setup and teardown can be performed by calling the subcommand from
-// within the CommandFunc callback
+// be looked up in the list of subcommands. If the subcommand is
+// found, the arguments will be parsed with the subcommand's FlagSet
+// and then the subcommands callback will be called.  Once the
+// callback exexutes next() (see CommandFunc) any subsequent
+// sub-commands are called
 func (c *Command) Run(args []string) (err error) {
 	c.Flags.Parse(args)
 	args = c.Flags.Args()
@@ -140,7 +147,13 @@ func (c *Command) Run(args []string) (err error) {
 	}
 
 	if c.callback != nil {
-		err = c.callback(args, subCommand)
+		next := func() error {
+			if subCommand != nil {
+				return subCommand.Run(args)
+			}
+			return nil
+		}
+		err = c.callback(args, next)
 	}
 
 	return err
