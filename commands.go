@@ -146,7 +146,9 @@ func (c *Command) Run(args []string) (err error) {
 		}
 	}
 
-	if c.callback != nil {
+	if c.callback == nil {
+		err = subCommand.Run(args)
+	} else {
 		next := func() error {
 			if subCommand != nil {
 				return subCommand.Run(args)
