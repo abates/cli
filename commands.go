@@ -48,7 +48,7 @@ type Command struct {
 	description string
 	callback    CommandFunc
 	subCommands map[string]*Command
-	out         io.Writer
+	output      io.Writer
 	Flags       *flag.FlagSet
 }
 
@@ -60,6 +60,7 @@ func New(name, usageStr, description string, callback CommandFunc) *Command {
 		description: description,
 		callback:    callback,
 		subCommands: make(map[string]*Command),
+		output:      os.Stderr,
 		Flags:       flag.NewFlagSet(name, flag.ExitOnError),
 	}
 }
@@ -67,14 +68,14 @@ func New(name, usageStr, description string, callback CommandFunc) *Command {
 // Register a subcommand
 func (c *Command) Register(name, usageStr, description string, callback CommandFunc) *Command {
 	subCommand := New(name, usageStr, description, callback)
-	subCommand.Flags.SetOutput(c.out)
+	subCommand.Flags.SetOutput(c.output)
 	c.subCommands[name] = subCommand
 	return subCommand
 }
 
 // SetOutput will set the io.Writer used for printing usage
 func (c *Command) SetOutput(writer io.Writer) {
-	c.out = writer
+	c.output = writer
 }
 
 func (c *Command) usage() {
@@ -90,31 +91,31 @@ func (c *Command) usage() {
 	sort.Strings(commandNames)
 
 	if c.indent == "" {
-		fmt.Fprintf(c.out, "Usage: %s [global options]", c.name)
+		fmt.Fprintf(c.output, "Usage: %s [global options]", c.name)
 		if len(c.subCommands) > 0 {
-			fmt.Fprintf(c.out, " <command> [command options]\n")
+			fmt.Fprintf(c.output, " <command> [command options]\n")
 		} else {
-			fmt.Fprintf(c.out, "\n")
+			fmt.Fprintf(c.output, "\n")
 		}
 	}
-	c.Flags.SetOutput(&flagWriter{c.indent, c.out})
+	c.Flags.SetOutput(&flagWriter{c.indent, c.output})
 	c.Flags.PrintDefaults()
 
 	if len(commandNames) > 0 {
 		indent := strings.Repeat(" ", maxNameLen)
-		fmt.Fprintf(c.out, "%sCommands:\n", c.indent)
+		fmt.Fprintf(c.output, "%sCommands:\n", c.indent)
 		for _, commandName := range commandNames {
 			command := c.subCommands[commandName]
-			fmt.Fprintf(c.out, nameFmt, commandName, command.usageStr)
+			fmt.Fprintf(c.output, nameFmt, commandName, command.usageStr)
 			if command.description != "" {
-				fmt.Fprintf(c.out, "%s%s %s\n", c.indent, indent, command.description)
+				fmt.Fprintf(c.output, "%s%s %s\n", c.indent, indent, command.description)
 			}
 			indent := fmt.Sprintf("%s%s  ", strings.Repeat(" ", maxNameLen), c.indent)
 			command.indent = indent
-			command.out = c.out
+			command.output = c.output
 			command.usage()
 		}
-		fmt.Fprintf(c.out, "\n")
+		fmt.Fprintf(c.output, "\n")
 	}
 }
 
