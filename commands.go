@@ -106,9 +106,13 @@ func (c *Command) usage() {
 		fmt.Fprintf(c.output, "%sCommands:\n", c.indent)
 		for _, commandName := range commandNames {
 			command := c.subCommands[commandName]
-			fmt.Fprintf(c.output, nameFmt, commandName, command.usageStr)
-			if command.description != "" {
-				fmt.Fprintf(c.output, "%s%s %s\n", c.indent, indent, command.description)
+			if command.usageStr == "" {
+				fmt.Fprintf(c.output, nameFmt, commandName, command.description)
+			} else {
+				fmt.Fprintf(c.output, nameFmt, commandName, command.usageStr)
+				if command.description != "" {
+					fmt.Fprintf(c.output, "%s%s %s\n", c.indent, indent, command.description)
+				}
 			}
 			indent := fmt.Sprintf("%s%s  ", strings.Repeat(" ", maxNameLen), c.indent)
 			command.indent = indent
