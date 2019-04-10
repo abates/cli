@@ -47,6 +47,8 @@ type Command struct {
 	usageStr    string
 	description string
 	callback    CommandFunc
+	args        []string
+	subCommand  *Command
 	subCommands map[string]*Command
 	output      io.Writer
 	Flags       *flag.FlagSet
@@ -123,16 +125,10 @@ func (c *Command) usage() {
 	}
 }
 
-// Run the command. The first argument is the command that will
-// be looked up in the list of subcommands. If the subcommand is
-// found, the arguments will be parsed with the subcommand's FlagSet
-// and then the subcommands callback will be called.  Once the
-// callback exexutes next() (see CommandFunc) any subsequent
-// sub-commands are called
-func (c *Command) Run(args []string) (err error) {
+// Parse the arguments and make them ready to run
+func (c *Command) Parse(args []string) {
 	c.Flags.Parse(args)
-	args = c.Flags.Args()
-	var subCommand *Command
+	c.args = c.Flags.Args()
 
 	if len(c.subCommands) > 0 {
 		if len(c.Flags.Args()) < 1 {
@@ -141,26 +137,36 @@ func (c *Command) Run(args []string) (err error) {
 			os.Exit(2)
 		}
 
-		cmdName := args[0]
-		args = args[1:]
-		subCommand = c.subCommands[cmdName]
-		if subCommand == nil {
+		cmdName := c.args[0]
+		c.args = c.args[1:]
+		c.subCommand = c.subCommands[cmdName]
+		if c.subCommand == nil {
 			// TODO make this an error we can use in a conditional
 			fmt.Fprintf(os.Stderr, "Unknown command %s\n", cmdName)
 			os.Exit(3)
+		} else {
+			c.subCommand.Parse(c.args)
 		}
 	}
+}
 
+// Run the command. The first argument is the command that will
+// be looked up in the list of subcommands. If the subcommand is
+// found, the arguments will be parsed with the subcommand's FlagSet
+// and then the subcommands callback will be called.  Once the
+// callback exexutes next() (see CommandFunc) any subsequent
+// sub-commands are called
+func (c *Command) Run() (err error) {
 	if c.callback == nil {
-		err = subCommand.Run(args)
+		err = c.subCommand.Run()
 	} else {
 		next := func() error {
-			if subCommand != nil {
-				return subCommand.Run(args)
+			if c.subCommand != nil {
+				return c.subCommand.Run()
 			}
 			return nil
 		}
-		err = c.callback(args, next)
+		err = c.callback(c.args, next)
 	}
 
 	return err
