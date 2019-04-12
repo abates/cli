@@ -1,38 +1,58 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 )
 
-type flagWriter struct {
-	indent string
+var (
+	ErrUnknownCommand  = errors.New("Unknown command")
+	ErrRequiredCommand = errors.New("A command is required")
+)
+
+type ErrorHandling int
+
+const (
+	ExitOnError     ErrorHandling = iota // Call os.Exit(2).
+	ContinueOnError                      // Return a descriptive error.
+	PanicOnError                         // Call panic with a descriptive error.
+)
+
+type indenter struct {
 	writer io.Writer
+	count  int
 }
 
-func (f flagWriter) Write(p []byte) (n int, err error) {
-	for _, line := range strings.Split(string(p), "\n") {
-		fmt.Fprintf(f.writer, "%s%s", f.indent, line)
-		if strings.TrimSpace(line) != "" {
-			fmt.Fprintf(f.writer, "\n")
-		}
-	}
-	return len(p), nil
+func (ind *indenter) Print(a ...interface{}) {
+	fmt.Fprint(ind.writer, a...)
+}
+
+func (ind *indenter) Printf(format string, a ...interface{}) {
+	fmt.Fprintf(ind.writer, format, a...)
+}
+
+func (ind *indenter) Println(a ...interface{}) {
+	fmt.Fprintln(ind.writer, a...)
+}
+
+func (ind *indenter) Indentln(a ...interface{}) {
+	fmt.Fprint(ind.writer, strings.Repeat("  ", ind.count))
+	fmt.Fprintln(ind.writer, a...)
+}
+
+func (ind *indenter) Indentf(format string, a ...interface{}) {
+	fmt.Fprint(ind.writer, strings.Repeat("  ", ind.count))
+	fmt.Fprintf(ind.writer, format, a...)
 }
 
 // CommandFunc is the callback function that will be executed when a
-// command is called. Next should be called by the command when the
-// next command (sub-command) should be called. next() will return
-// once the sub-command chain has completed. This allows setup and
-// teardown for sub-commands
-type CommandFunc func(args []string, next NextFunc) error
-
-// NextFunc will execute the next command in a chain of subcommands
-type NextFunc func() error
+// command is called. If the CommandFunc returns a non-nil error
+// then processing stops immediately
+type CommandFunc func() error
 
 // Command represents a single cli command. The idea is that a cli app
 // is run such as:
@@ -42,131 +62,156 @@ type NextFunc func() error
 // a Command object represents a single command in the hierarchy and is
 // a placeholder to register subcommands
 type Command struct {
-	indent      string
-	name        string
-	usageStr    string
-	description string
-	callback    CommandFunc
-	args        []string
-	subCommand  *Command
-	subCommands map[string]*Command
-	output      io.Writer
-	Flags       *flag.FlagSet
+	name          string
+	usageStr      string
+	description   string
+	callback      CommandFunc
+	args          []string
+	subCommand    *Command
+	subCommands   subCommands
+	errorHandling ErrorHandling
+
+	output io.Writer
+
+	Arguments Arguments
+	Flags     flag.FlagSet
 }
 
-// New will return a fully initialized command object
-func New(name, usageStr, description string, callback CommandFunc) *Command {
-	return &Command{
-		name:        name,
-		usageStr:    usageStr,
-		description: description,
-		callback:    callback,
-		subCommands: make(map[string]*Command),
-		output:      os.Stderr,
-		Flags:       flag.NewFlagSet(name, flag.ExitOnError),
+type Option func(*Command)
+
+func UsageOption(usageStr string) Option { return func(cmd *Command) { cmd.usageStr = usageStr } }
+
+func DescOption(description string) Option {
+	return func(cmd *Command) { cmd.description = description }
+}
+
+func CallbackOption(callback CommandFunc) Option {
+	return func(cmd *Command) { cmd.callback = callback }
+}
+
+func OutputOption(output io.Writer) Option { return func(cmd *Command) { cmd.SetOutput(output) } }
+
+func ErrorHandlingOption(errorHandling ErrorHandling) Option {
+	return func(cmd *Command) { cmd.errorHandling = errorHandling }
+}
+
+// New will return a Command object that is initialized according
+// to the supplied command options
+func New(name string, options ...Option) *Command {
+	cmd := &Command{
+		name:          name,
+		output:        os.Stderr,
+		errorHandling: ExitOnError,
+		subCommands:   subCommands{cmds: make(map[string]*Command)},
 	}
+
+	for _, option := range options {
+		option(cmd)
+	}
+
+	return cmd
 }
 
-// Register a subcommand
-func (c *Command) Register(name, usageStr, description string, callback CommandFunc) *Command {
-	subCommand := New(name, usageStr, description, callback)
-	subCommand.Flags.SetOutput(c.output)
-	c.subCommands[name] = subCommand
+// SubCommand adds a subcommand to the current command hierarchy
+func (cmd *Command) SubCommand(name string, options ...Option) *Command {
+	subCommand := New(name, options...)
+	subCommand.Flags.SetOutput(cmd.output)
+	cmd.subCommands.set(name, subCommand)
 	return subCommand
 }
 
 // SetOutput will set the io.Writer used for printing usage
-func (c *Command) SetOutput(writer io.Writer) {
-	c.output = writer
+func (cmd *Command) SetOutput(writer io.Writer) {
+	cmd.output = writer
 }
 
-func (c *Command) usage() {
-	maxNameLen := 0
-	var commandNames []string
-	for name := range c.subCommands {
-		if len(name) > maxNameLen {
-			maxNameLen = len(name)
-		}
-		commandNames = append(commandNames, name)
-	}
-	nameFmt := fmt.Sprintf("%s%%-%ds %%s\n", c.indent, maxNameLen)
-	sort.Strings(commandNames)
+func (cmd *Command) usage(ind *indenter) {
+	// count the number of flags that have been created
+	numFlags := 0
+	cmd.Flags.VisitAll(func(*flag.Flag) { numFlags++ })
 
-	if c.indent == "" {
-		fmt.Fprintf(c.output, "Usage: %s [global options]", c.name)
-		if len(c.subCommands) > 0 {
-			fmt.Fprintf(c.output, " <command> [command options]\n")
+	if ind.count == 0 {
+		ind.Indentf("Usage: %s", cmd.name)
+		if cmd.usageStr != "" {
+			ind.Printf(" %s\n", cmd.usageStr)
 		} else {
-			fmt.Fprintf(c.output, "\n")
-		}
-	}
-	c.Flags.SetOutput(&flagWriter{c.indent, c.output})
-	c.Flags.PrintDefaults()
-
-	if len(commandNames) > 0 {
-		indent := strings.Repeat(" ", maxNameLen)
-		fmt.Fprintf(c.output, "%sCommands:\n", c.indent)
-		for _, commandName := range commandNames {
-			command := c.subCommands[commandName]
-			if command.usageStr == "" {
-				fmt.Fprintf(c.output, nameFmt, commandName, command.description)
-			} else {
-				fmt.Fprintf(c.output, nameFmt, commandName, command.usageStr)
-				if command.description != "" {
-					fmt.Fprintf(c.output, "%s%s %s\n", c.indent, indent, command.description)
-				}
+			if numFlags > 0 {
+				ind.Print(" [global options]")
 			}
-			indent := fmt.Sprintf("%s%s  ", strings.Repeat(" ", maxNameLen), c.indent)
-			command.indent = indent
-			command.output = c.output
-			command.usage()
+
+			if cmd.subCommands.len() > 0 {
+				ind.Printf(" <command> [command options]\n")
+			} else {
+				ind.Println()
+			}
 		}
-		fmt.Fprintf(c.output, "\n")
 	}
+	builder := &strings.Builder{}
+	cmd.Flags.SetOutput(builder)
+	cmd.Flags.PrintDefaults()
+
+	str := builder.String()
+	if len(str) > 0 {
+		for _, line := range strings.Split(str, "\n") {
+			ind.Indentln(line)
+		}
+	}
+
+	cmd.subCommands.usage(ind)
+}
+
+func (cmd *Command) handleErr(err error) error {
+	if err != nil {
+		if cmd.errorHandling == ExitOnError {
+			ind := &indenter{writer: cmd.output}
+			ind.Printf("%v\n", err)
+			cmd.usage(ind)
+			os.Exit(2)
+		} else if cmd.errorHandling == PanicOnError {
+			panic(err)
+		}
+	}
+	return err
 }
 
 // Parse the arguments and make them ready to run
-func (c *Command) Parse(args []string) {
-	c.Flags.Parse(args)
-	c.args = c.Flags.Args()
+func (cmd *Command) Parse(args []string) (err error) {
+	cmd.Flags.Parse(args)
+	cmd.args = cmd.Flags.Args()
 
-	if len(c.subCommands) > 0 {
-		if len(c.Flags.Args()) < 1 {
-			// TODO make this an error we can use in a conditional
-			c.usage()
-			os.Exit(2)
+	if cmd.Arguments.Len() > 0 {
+		err = cmd.handleErr(cmd.Arguments.Parse(cmd.args))
+		cmd.args = cmd.Arguments.Args()
+	}
+
+	if cmd.subCommands.len() > 0 {
+		if len(cmd.args) < 1 {
+			err = cmd.handleErr(ErrRequiredCommand)
 		}
 
-		cmdName := c.args[0]
-		c.args = c.args[1:]
-		c.subCommand = c.subCommands[cmdName]
-		if c.subCommand == nil {
-			// TODO make this an error we can use in a conditional
-			fmt.Fprintf(os.Stderr, "Unknown command %s\n", cmdName)
-			os.Exit(3)
-		} else {
-			c.subCommand.Parse(c.args)
+		if err == nil {
+			cmdName := cmd.args[0]
+			cmd.args = cmd.args[1:]
+			cmd.subCommand = cmd.subCommands.get(cmdName)
+			if cmd.subCommand == nil {
+				err = cmd.handleErr(ErrUnknownCommand)
+			} else {
+				cmd.subCommand.Parse(cmd.args)
+			}
 		}
 	}
+	return err
 }
 
-// Run the command. The first argument is the command that will
-// be looked up in the list of subcommands. If the subcommand is
-// found, the arguments will be parsed with the subcommand's FlagSet
-// and then the subcommands callback will be called.  Once the
-// callback exexutes next() (see CommandFunc) any subsequent
-// sub-commands are called
-func (c *Command) Run() (err error) {
-	if c.callback == nil {
-		err = c.subCommand.Run()
+// Run the command.
+func (cmd *Command) Run() (err error) {
+	if cmd.callback == nil {
+		err = cmd.subCommand.Run()
 	} else {
-		next := func() error {
-			if c.subCommand != nil {
-				return c.subCommand.Run()
-			}
-			return nil
+		err = cmd.callback()
+		if err == nil && cmd.subCommand != nil {
+			err = cmd.subCommand.Run()
 		}
-		err = c.callback(c.args, next)
 	}
 
 	return err
