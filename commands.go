@@ -157,7 +157,34 @@ func (cmd *Command) usage(ind *indenter) {
 		}
 	}
 
-	cmd.subCommands.usage(ind)
+	if cmd.subCommands.len() > 0 {
+		ind.Indentln("Commands:")
+		nameFmt := fmt.Sprintf("%%-%ds", cmd.subCommands.nameLen)
+		var prevCmd *Command
+		cmd.subCommands.visitAll(func(command *Command) {
+			if prevCmd != nil && prevCmd.subCommands.len() == 0 && command.subCommands.len() > 0 {
+				ind.Println()
+			}
+
+			ind.Indentf(nameFmt, command.name)
+			if command.usageStr == "" {
+				if command.description != "" {
+					ind.Printf(" %s\n", command.description)
+				} else {
+					ind.Println()
+				}
+			} else {
+				ind.Printf(" %s\n", command.usageStr)
+				if command.description != "" {
+					ind.Indentf("%s %s\n", strings.Repeat(" ", cmd.subCommands.nameLen), command.description)
+				}
+			}
+
+			command.usage(&indenter{writer: ind.writer, count: ind.count + cmd.subCommands.nameLen})
+			prevCmd = command
+		})
+		ind.Println()
+	}
 }
 
 func (cmd *Command) handleErr(err error) error {

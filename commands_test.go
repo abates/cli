@@ -45,9 +45,13 @@ func TestCommandUsage(t *testing.T) {
 		setup func(*Command)
 		want  string
 	}{
+		{"usage str", func(cmd *Command) { cmd.usageStr = "foobar" }, "Usage: usage str foobar\n"},
 		{"no flags", func(*Command) {}, "Usage: no flags\n"},
 		{"one flag", func(cmd *Command) { cmd.Flags.Var(&testValue{}, "foo", "bar") }, "Usage: one flag [global options]\n  -foo value\n    \tbar\n\n"},
-		{"subcommand", func(cmd *Command) { cmd.SubCommand("foo") }, "Usage: subcommand <command> [command options]\nCommands:\nfoo\n"},
+		{"subcommand", func(cmd *Command) { cmd.SubCommand("foo") }, "Usage: subcommand <command> [command options]\nCommands:\nfoo\n\n"},
+		{"subcommand (description)", func(cmd *Command) { cmd.SubCommand("foo", DescOption("bar")) }, "Usage: subcommand (description) <command> [command options]\nCommands:\nfoo bar\n\n"},
+		{"subcommand (usage)", func(cmd *Command) { cmd.SubCommand("foo", UsageOption("bar")) }, "Usage: subcommand (usage) <command> [command options]\nCommands:\nfoo bar\n\n"},
+		{"subcommand (usage, description)", func(cmd *Command) { cmd.SubCommand("foo", UsageOption("bar"), DescOption("foobar")) }, "Usage: subcommand (usage, description) <command> [command options]\nCommands:\nfoo bar\n    foobar\n\n"},
 	}
 
 	for _, test := range tests {
