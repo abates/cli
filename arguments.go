@@ -150,6 +150,7 @@ type Arguments struct {
 type argument struct {
 	value Value
 	desc  string
+	slice bool
 }
 
 func (args *Arguments) Bool(p *bool, desc string)              { args.Var((*boolValue)(p), desc) }
@@ -162,7 +163,11 @@ func (args *Arguments) Uint(p *uint, desc string)              { args.Var((*uint
 func (args *Arguments) Uint64(p *uint64, desc string)          { args.Var((*uint64Value)(p), desc) }
 
 func (args *Arguments) Var(value Value, desc string) {
-	args.args = append(args.args, &argument{value, desc})
+	args.args = append(args.args, &argument{value, desc, false})
+}
+
+func (args *Arguments) VarSlice(value Value, desc string) {
+	args.args = append(args.args, &argument{value, desc, true})
 }
 
 func (args *Arguments) Len() int       { return len(args.args) }
@@ -174,9 +179,19 @@ func (args *Arguments) Parse(input []string) error {
 	}
 	args.input = input
 	for i, arg := range args.args {
-		err := arg.value.Set(input[i])
-		if err != nil {
-			return err
+		if arg.slice {
+			for ; i < len(args.input); i++ {
+				err := arg.value.Set(input[i])
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		} else {
+			err := arg.value.Set(input[i])
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
