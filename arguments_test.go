@@ -13,6 +13,28 @@ type getter interface {
 	Get() interface{}
 }
 
+type intSlice []int
+
+func (il *intSlice) Set(str string) error {
+	v, err := strconv.Atoi(str)
+	if err == nil {
+		*il = append(*il, v)
+	}
+	return err
+}
+
+func (il *intSlice) Get() interface{} {
+	return ([]int)(*il)
+}
+
+func (il *intSlice) String() string {
+	list := make([]string, len(*il))
+	for i, v := range *il {
+		list[i] = strconv.Itoa(v)
+	}
+	return strings.Join(list, ",")
+}
+
 func TestArguments(t *testing.T) {
 	var b bool
 	var d time.Duration
@@ -22,6 +44,7 @@ func TestArguments(t *testing.T) {
 	var s string
 	var ui uint
 	var ui64 uint64
+	var varSlice []int
 
 	tests := []struct {
 		desc       string
@@ -47,6 +70,7 @@ func TestArguments(t *testing.T) {
 		{"uint", []string{"five"}, func(args *Arguments) { args.Uint(&ui, "uint") }, 0, "", errParse},
 		{"uint64", []string{"6"}, func(args *Arguments) { args.Uint64(&ui64, "uint64") }, uint64(6), "6", nil},
 		{"uint64 err", []string{"six"}, func(args *Arguments) { args.Uint64(&ui64, "uint64") }, 0, "", errParse},
+		{"varslice", []string{"1", "2", "3"}, func(args *Arguments) { args.VarSlice((*intSlice)(&varSlice), "n n n n...") }, []int{1, 2, 3}, "1,2,3", nil},
 	}
 
 	for _, test := range tests {
@@ -59,7 +83,7 @@ func TestArguments(t *testing.T) {
 			} else if gotErr == nil {
 				if g, ok := args.args[0].value.(getter); ok {
 					got := g.Get()
-					if test.want != got {
+					if !reflect.DeepEqual(test.want, got) {
 						t.Errorf("want %v got %v", test.want, got)
 					}
 

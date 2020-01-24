@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"reflect"
 	"strings"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestOptions(t *testing.T) {
-	cb := func() error { return nil }
+	cb := func(string) error { return nil }
 
 	tests := []struct {
 		desc   string
@@ -100,5 +101,37 @@ func TestCommandParse(t *testing.T) {
 		t.Errorf("Expected %q got %q", "fourth", first)
 	} else if second != "fifth" {
 		t.Errorf("Expected %q got %q", "fifth", second)
+	}
+}
+
+func TestCommandRun(t *testing.T) {
+	runErr := errors.New("Run Error!")
+
+	tests := []struct {
+		name    string
+		prepare func(*Command)
+		args    []string
+		wantErr error
+	}{
+		{"no func", func(*Command) {}, nil, ErrNoCommandFunc},
+		{"run error", func(c *Command) { c.callback = func(string) error { return runErr } }, nil, runErr},
+		{"sub command no func", func(c *Command) { c.SubCommand("foo") }, []string{"foo"}, ErrNoCommandFunc},
+		{"callback subcommand no func", func(c *Command) { c.callback = func(string) error { return nil }; c.SubCommand("foo") }, []string{"foo"}, ErrNoCommandFunc},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := New(test.name)
+			test.prepare(cmd)
+			err := cmd.Parse(test.args)
+			if err != nil {
+				t.Errorf("Unexpected error %v", err)
+			}
+
+			gotErr := cmd.Run()
+			if test.wantErr != gotErr {
+				t.Errorf("Wanted error %v got %v", test.wantErr, gotErr)
+			}
+		})
 	}
 }

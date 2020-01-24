@@ -12,6 +12,7 @@ import (
 var (
 	ErrUnknownCommand  = errors.New("Unknown command")
 	ErrRequiredCommand = errors.New("A command is required")
+	ErrNoCommandFunc   = errors.New("No callback function was provided for the command")
 )
 
 type ErrorHandling int
@@ -52,7 +53,7 @@ func (ind *indenter) Indentf(format string, a ...interface{}) {
 // CommandFunc is the callback function that will be executed when a
 // command is called. If the CommandFunc returns a non-nil error
 // then processing stops immediately
-type CommandFunc func() error
+type CommandFunc func(name string) error
 
 // Command represents a single cli command. The idea is that a cli app
 // is run such as:
@@ -233,9 +234,13 @@ func (cmd *Command) Parse(args []string) (err error) {
 // Run the command.
 func (cmd *Command) Run() (err error) {
 	if cmd.callback == nil {
-		err = cmd.subCommand.Run()
+		if cmd.subCommand == nil {
+			err = ErrNoCommandFunc
+		} else {
+			err = cmd.subCommand.Run()
+		}
 	} else {
-		err = cmd.callback()
+		err = cmd.callback(cmd.name)
 		if err == nil && cmd.subCommand != nil {
 			err = cmd.subCommand.Run()
 		}
