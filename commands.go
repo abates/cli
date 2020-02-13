@@ -18,7 +18,8 @@ var (
 type ErrorHandling int
 
 const (
-	ExitOnError     ErrorHandling = iota // Call os.Exit(2).
+	UsageOnError    ErrorHandling = iota // Print Usage then call os.Exit(2).
+	ExitOnError                          // Call os.Exit(2).
 	ContinueOnError                      // Return a descriptive error.
 	PanicOnError                         // Call panic with a descriptive error.
 )
@@ -190,10 +191,12 @@ func (cmd *Command) usage(ind *indenter) {
 
 func (cmd *Command) handleErr(err error) error {
 	if err != nil {
-		if cmd.errorHandling == ExitOnError {
+		if cmd.errorHandling == UsageOnError {
 			ind := &indenter{writer: cmd.output}
 			ind.Printf("%v\n", err)
 			cmd.usage(ind)
+			os.Exit(2)
+		} else if cmd.errorHandling == ExitOnError {
 			os.Exit(2)
 		} else if cmd.errorHandling == PanicOnError {
 			panic(err)
