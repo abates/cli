@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
+	"time"
 )
 
 var (
@@ -88,6 +90,72 @@ func DescOption(description string) Option {
 
 func CallbackOption(callback CommandFunc) Option {
 	return func(cmd *Command) { cmd.callback = callback }
+}
+
+func ArgCallbackOption(cb interface{}) Option {
+	v := reflect.ValueOf(cb)
+	if v.Kind() != reflect.Func {
+		panic("Can only callback func types")
+	}
+
+	return func(cmd *Command) {
+		//variables := []reflect.Value{}
+		variables := []interface{}{}
+		t := reflect.TypeOf(cb)
+		for i := 0; i < t.NumIn(); i++ {
+			switch t.In(i) {
+			case reflect.TypeOf(false):
+				var b bool
+				cmd.Arguments.Bool(&b, "")
+				variables = append(variables, &b)
+			case reflect.TypeOf(time.Duration(0)):
+				var d time.Duration
+				cmd.Arguments.Duration(&d, "")
+				variables = append(variables, &d)
+			case reflect.TypeOf(float64(0)):
+				var f float64
+				cmd.Arguments.Float64(&f, "")
+				variables = append(variables, &f)
+			case reflect.TypeOf(int(0)):
+				var i int
+				cmd.Arguments.Int(&i, "")
+				variables = append(variables, &i)
+			case reflect.TypeOf(int64(0)):
+				var i int64
+				cmd.Arguments.Int64(&i, "")
+				variables = append(variables, &i)
+			case reflect.TypeOf(""):
+				var s string
+				cmd.Arguments.String(&s, "")
+				variables = append(variables, &s)
+			case reflect.TypeOf(uint(0)):
+				var u uint
+				cmd.Arguments.Uint(&u, "")
+				variables = append(variables, &u)
+			case reflect.TypeOf(uint64(0)):
+				var u uint64
+				cmd.Arguments.Uint64(&u, "")
+				variables = append(variables, &u)
+			}
+		}
+
+		cmd.callback = func(string) error {
+			values := []reflect.Value{}
+			for _, v := range variables {
+				values = append(values, reflect.Indirect(reflect.ValueOf(v)))
+			}
+			ret := v.Call(values)
+			if len(ret) > 0 {
+				if ret[len(ret)-1].CanInterface() {
+					i := ret[len(ret)-1].Interface()
+					if err, ok := i.(error); ok {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+	}
 }
 
 func OutputOption(output io.Writer) Option { return func(cmd *Command) { cmd.SetOutput(output) } }

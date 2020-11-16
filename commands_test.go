@@ -2,10 +2,12 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestOptions(t *testing.T) {
@@ -34,6 +36,41 @@ func TestOptions(t *testing.T) {
 			} else {
 				if !reflect.DeepEqual(test.want, got) {
 					t.Errorf("want cmd %+v got %+v", test.want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestArgCallbackOption(t *testing.T) {
+	tests := []struct {
+		desc    string
+		option  Option
+		input   []string
+		wantErr string
+	}{
+		{"bool", ArgCallbackOption(func(b bool) error { return fmt.Errorf("%v", b) }), []string{"true"}, "true"},
+		{"duration", ArgCallbackOption(func(d time.Duration) error { return fmt.Errorf("%v", d) }), []string{"1s"}, "1s"},
+		{"float64", ArgCallbackOption(func(f float64) error { return fmt.Errorf("%v", f) }), []string{"1.234"}, "1.234"},
+		{"int", ArgCallbackOption(func(i int) error { return fmt.Errorf("%v", i) }), []string{"4234"}, "4234"},
+		{"int64", ArgCallbackOption(func(i int64) error { return fmt.Errorf("%v", i) }), []string{"934"}, "934"},
+		{"string", ArgCallbackOption(func(s string) error { return fmt.Errorf("%v", s) }), []string{"foo"}, "foo"},
+		{"uint", ArgCallbackOption(func(u uint) error { return fmt.Errorf("%v", u) }), []string{"1234"}, "1234"},
+		{"uint64", ArgCallbackOption(func(u uint64) error { return fmt.Errorf("%v", u) }), []string{"1234"}, "1234"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			cmd := New("", test.option)
+			err := cmd.Parse(test.input)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			} else {
+				err = cmd.callback("")
+				if err == nil {
+					t.Errorf("Expected error")
+				} else if err.Error() != test.wantErr {
+					t.Errorf("Wanted error %s got %s", test.wantErr, err.Error())
 				}
 			}
 		})
