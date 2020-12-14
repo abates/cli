@@ -20,7 +20,7 @@ func TestEdit(t *testing.T) {
 	want := "this is some output"
 	os.Setenv("EDITOR", os.Args[0])
 	os.Setenv("TEST_OUTPUT", want)
-	editCmd.Args = []string{"-run=TestHelperProcess", "--"}
+	editCmd.Args = []string{"-test.run=TestHelperProcess", "--"}
 	editCmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
 
 	gotBytes, err := Edit([]byte{})

@@ -18,11 +18,12 @@ func Edit(input []byte) (output []byte, err error) {
 	} else {
 		editCmd.Path, err = exec.LookPath(editCmd.Path)
 		if err == nil {
+			editCmd.Args = append([]string{editCmd.Path}, editCmd.Args...)
 			var tmpfile *os.File
 			tmpfile, err = ioutil.TempFile("", "")
 			if err == nil {
 				defer os.Remove(tmpfile.Name())
-				tmpfile.Write(input)
+				_, err = tmpfile.Write(input)
 
 				if err = tmpfile.Close(); err == nil {
 					editCmd.Args = append(editCmd.Args, tmpfile.Name())
