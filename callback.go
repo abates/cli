@@ -6,107 +6,107 @@ import (
 	"time"
 )
 
-func Callback(cb interface{}, descriptions ...string) CommandFunc {
-	var inputErr error
-	arguments := Arguments{}
-	variables := []interface{}{}
+type callback struct {
+	reflect.Value
+	arguments Arguments
+	variables []interface{}
+	t         reflect.Type
+	inputErr  error
+}
 
-	v := reflect.ValueOf(cb)
-	t := reflect.TypeOf(cb)
+func Callback(f interface{}, descriptions ...string) CommandFunc {
+	cb := callback{Value: reflect.ValueOf(f), t: reflect.TypeOf(f)}
+	cb.process(descriptions...)
+	return cb.callback
+}
 
-	if v.Kind() == reflect.Func {
-		for i := 0; i < t.NumIn(); i++ {
-			description := ""
-			if i < len(descriptions) {
-				description = descriptions[i]
-			}
-			inArg := t.In(i)
-			switch inArg {
-			case reflect.TypeOf(false):
-				var b bool
-				arguments.Bool(&b, description)
-				variables = append(variables, &b)
-			case reflect.TypeOf(time.Duration(0)):
-				var d time.Duration
-				arguments.Duration(&d, description)
-				variables = append(variables, &d)
-			case reflect.TypeOf(float64(0)):
-				var f float64
-				arguments.Float64(&f, description)
-				variables = append(variables, &f)
-			case reflect.TypeOf(int(0)):
-				var i int
-				arguments.Int(&i, description)
-				variables = append(variables, &i)
-			case reflect.TypeOf(int64(0)):
-				var i int64
-				arguments.Int64(&i, description)
-				variables = append(variables, &i)
-			case reflect.TypeOf(""):
-				var s string
-				arguments.String(&s, description)
-				variables = append(variables, &s)
-			case reflect.TypeOf(uint(0)):
-				var u uint
-				arguments.Uint(&u, description)
-				variables = append(variables, &u)
-			case reflect.TypeOf(uint64(0)):
-				var u uint64
-				arguments.Uint64(&u, description)
-				variables = append(variables, &u)
-			default:
-				if inArg.Implements(reflect.TypeOf((*Value)(nil)).Elem()) {
-					if inArg.Kind() == reflect.Ptr {
-						u := reflect.New(inArg.Elem()).Interface().(Value)
-						arguments.Var(u, description)
-						variables = append(variables, u)
-					} else {
-						inputErr = fmt.Errorf("%v argument must be a pointer to a type implementing Value", inArg)
-					}
-				} else if inArg.Implements(reflect.TypeOf((*SliceValue)(nil)).Elem()) {
-					if inArg.Kind() == reflect.Ptr {
-						u := reflect.New(inArg.Elem()).Interface().(SliceValue)
-						arguments.VarSlice(u, description)
-						variables = append(variables, u)
-					} else {
-						inputErr = fmt.Errorf("%v argument must be a pointer to a type implementing Value", inArg)
-					}
-				} else {
-					inputErr = fmt.Errorf("Type %s does not implement Value interface", inArg)
-				}
+func getError(values []reflect.Value) error {
+	if len(values) > 0 {
+		if values[len(values)-1].CanInterface() {
+			i := values[len(values)-1].Interface()
+			if err, ok := i.(error); ok {
+				return err
 			}
 		}
-	} else {
-		inputErr = fmt.Errorf("Provided callback is not a function")
+	}
+	return nil
+}
+
+func (cb *callback) callback(name string, args ...string) ([]string, error) {
+	if cb.inputErr != nil {
+		return args, cb.inputErr
 	}
 
-	return func(name string, args ...string) ([]string, error) {
-		if inputErr != nil {
-			return args, inputErr
-		}
-
-		err := arguments.Parse(args)
-		if err == nil {
-			args = arguments.Args()
-			values := []reflect.Value{}
-			for i, v := range variables {
-				if t.In(i).Kind() == reflect.Ptr {
-					values = append(values, reflect.ValueOf(v))
-				} else {
-					values = append(values, reflect.Indirect(reflect.ValueOf(v)))
-				}
-			}
-
-			ret := v.Call(values)
-			if len(ret) > 0 {
-				if ret[len(ret)-1].CanInterface() {
-					i := ret[len(ret)-1].Interface()
-					if err, ok := i.(error); ok {
-						return args, err
-					}
-				}
+	err := cb.arguments.Parse(args)
+	if err == nil {
+		args = cb.arguments.Args()
+		values := []reflect.Value{}
+		for i, v := range cb.variables {
+			if cb.t.In(i).Kind() == reflect.Ptr {
+				values = append(values, reflect.ValueOf(v))
+			} else {
+				values = append(values, reflect.Indirect(reflect.ValueOf(v)))
 			}
 		}
-		return args, err
+
+		err = getError(cb.Call(values))
+	}
+	return args, err
+}
+
+func (cb *callback) addVar(v interface{}) {
+	cb.variables = append(cb.variables, v)
+}
+
+func (cb *callback) tryValue(arg reflect.Type, description string, wantType reflect.Type, addTo reflect.Value) bool {
+	if arg.Kind() != reflect.Ptr {
+		return cb.tryValue(reflect.PtrTo(arg), description, wantType, addTo)
+	}
+
+	if arg.Implements(wantType) {
+		v := reflect.New(arg.Elem())
+		addTo.Call([]reflect.Value{v, reflect.ValueOf(description)})
+		cb.addVar(v.Interface())
+		return true
+	}
+	return false
+}
+
+func (cb *callback) process(descriptions ...string) {
+	if cb.Kind() != reflect.Func {
+		cb.inputErr = fmt.Errorf("Provided callback is not a function")
+		return
+	}
+
+	for i := 0; i < cb.t.NumIn(); i++ {
+		description := ""
+		if i < len(descriptions) {
+			description = descriptions[i]
+		}
+		inArg := cb.t.In(i)
+		switch inArg {
+		case reflect.TypeOf(false):
+			cb.addVar(cb.arguments.Bool(description))
+		case reflect.TypeOf(time.Duration(0)):
+			cb.addVar(cb.arguments.Duration(description))
+		case reflect.TypeOf(float64(0)):
+			cb.addVar(cb.arguments.Float64(description))
+		case reflect.TypeOf(int(0)):
+			cb.addVar(cb.arguments.Int(description))
+		case reflect.TypeOf(int64(0)):
+			cb.addVar(cb.arguments.Int64(description))
+		case reflect.TypeOf(""):
+			cb.addVar(cb.arguments.String(description))
+		case reflect.TypeOf(uint(0)):
+			cb.addVar(cb.arguments.Uint(description))
+		case reflect.TypeOf(uint64(0)):
+			cb.addVar(cb.arguments.Uint64(description))
+		default:
+			if !cb.tryValue(inArg, description, reflect.TypeOf((*Value)(nil)).Elem(), reflect.ValueOf(cb.arguments.Var)) {
+				if !cb.tryValue(inArg, description, reflect.TypeOf((*SliceValue)(nil)).Elem(), reflect.ValueOf(cb.arguments.VarSlice)) {
+					cb.inputErr = fmt.Errorf("%v must implement either Value or ValueSlice interfaces", inArg)
+				}
+			}
+		}
 	}
 }

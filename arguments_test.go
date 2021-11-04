@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"flag"
 	"io"
 	"reflect"
 	"strconv"
@@ -40,76 +40,91 @@ func (il *intSlice) String() string {
 	return strings.Join(list, ",")
 }
 
-// this is a non-sensical type since it's methods don't
-// have a pointer receiver. This is strictly for testing
-// stupid input
-type byteslice []byte
+func TestStringers(t *testing.T) {
+	tests := []struct {
+		desc    string
+		input   interface{}
+		want    string
+		wantGet interface{}
+	}{
+		{"bool", boolValue(true), "true", true},
+		{"int", intValue(42), "42", 42},
+		{"int64", int64Value(43), "43", int64(43)},
+		{"uint", uintValue(44), "44", uint(44)},
+		{"uint64", uint64Value(45), "45", uint64(45)},
+		{"string", stringValue("12345"), "12345", "12345"},
+		{"float64", float64Value(46), "46", float64(46)},
+		{"duration", durationValue(time.Second * 64), "1m4s", time.Second * 64},
+	}
 
-func (b byteslice) Set(str string) error {
-	b = []byte(str)
-	return nil
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			g := reflect.New(reflect.TypeOf(test.input))
+			g.Elem().Set(reflect.ValueOf(test.input))
+			if value, ok := g.Interface().(flag.Value); ok {
+				got := value.String()
+				if test.want != got {
+					t.Errorf("Wanted string %q got %q", test.want, got)
+				}
+			} else {
+				t.Errorf("Expected %T to implement flag.Value", test.input)
+			}
+
+			if getter, ok := g.Interface().(flag.Getter); ok {
+				got := getter.Get()
+				if test.wantGet != got {
+					t.Errorf("Wanted value %v got %v", test.wantGet, got)
+				}
+			} else {
+				t.Errorf("Expected %T to implement flag.Getter", test.input)
+			}
+		})
+	}
 }
 
-func (b byteslice) String() string { return string(b) }
-
 func TestArguments(t *testing.T) {
-	var b bool
-	var d time.Duration
-	var i int
-	var i64 int64
-	var f64 float64
-	var s string
-	var ui uint
-	var ui64 uint64
-	var varSlice []int
-
 	tests := []struct {
-		desc       string
-		input      []string
-		cb         func(*Arguments)
-		want       interface{}
-		wantString string
-		wantErr    error
+		desc    string
+		input   []string
+		cb      func(*Arguments) interface{}
+		want    interface{}
+		wantErr error
 	}{
-		{"bool", []string{"true"}, func(args *Arguments) { args.Bool(&b, "bool") }, true, "true", nil},
-		{"bool", []string{"foobar"}, func(args *Arguments) { args.Bool(&b, "bool") }, false, "false", errParse},
-		{"duration", []string{"64s"}, func(args *Arguments) { args.Duration(&d, "duration") }, time.Second * 64, "1m4s", nil},
-		{"duration err", []string{"sixty-four seconds"}, func(args *Arguments) { args.Duration(&d, "duration") }, time.Duration(0), "", errParse},
-		{"int", []string{"1"}, func(args *Arguments) { args.Int(&i, "int") }, 1, "1", nil},
-		{"int errParse", []string{"one"}, func(args *Arguments) { args.Int(&i, "int") }, 0, "", errParse},
-		{"int errRange", []string{"18446744073709551615"}, func(args *Arguments) { args.Int(&i, "int") }, 0, "", errRange},
-		{"int64", []string{"2"}, func(args *Arguments) { args.Int64(&i64, "int64") }, int64(2), "2", nil},
-		{"int64 err", []string{"two"}, func(args *Arguments) { args.Int64(&i64, "int64") }, 0, "", errParse},
-		{"float64", []string{"2.001"}, func(args *Arguments) { args.Float64(&f64, "float64") }, float64(2.001), "2.001", nil},
-		{"float64 err", []string{"two point zero zero one"}, func(args *Arguments) { args.Float64(&f64, "float64") }, 0, "", errParse},
-		{"string", []string{"foobar"}, func(args *Arguments) { args.String(&s, "string") }, "foobar", "foobar", nil},
-		{"uint", []string{"5"}, func(args *Arguments) { args.Uint(&ui, "uint") }, uint(5), "5", nil},
-		{"uint", []string{"five"}, func(args *Arguments) { args.Uint(&ui, "uint") }, 0, "", errParse},
-		{"uint64", []string{"6"}, func(args *Arguments) { args.Uint64(&ui64, "uint64") }, uint64(6), "6", nil},
-		{"uint64 err", []string{"six"}, func(args *Arguments) { args.Uint64(&ui64, "uint64") }, 0, "", errParse},
-		{"varslice", []string{"1", "2", "3"}, func(args *Arguments) { args.VarSlice((*intSlice)(&varSlice), "n n n n...") }, []int{1, 2, 3}, "1,2,3", nil},
+		{"bool", []string{"true"}, func(args *Arguments) interface{} { return args.Bool("bool") }, true, nil},
+		{"bool", []string{"foobar"}, func(args *Arguments) interface{} { return args.Bool("bool") }, false, errParse},
+		{"duration", []string{"64s"}, func(args *Arguments) interface{} { return args.Duration("duration") }, time.Second * 64, nil},
+		{"duration err", []string{"sixty-four seconds"}, func(args *Arguments) interface{} { return args.Duration("duration") }, time.Duration(0), errParse},
+		{"int", []string{"1"}, func(args *Arguments) interface{} { return args.Int("int") }, 1, nil},
+		{"int errParse", []string{"one"}, func(args *Arguments) interface{} { return args.Int("int") }, 0, errParse},
+		{"int errRange", []string{"18446744073709551615"}, func(args *Arguments) interface{} { return args.Int("int") }, 0, errRange},
+		{"int64", []string{"2"}, func(args *Arguments) interface{} { return args.Int64("int64") }, int64(2), nil},
+		{"int64 err", []string{"two"}, func(args *Arguments) interface{} { return args.Int64("int64") }, 0, errParse},
+		{"float64", []string{"2.001"}, func(args *Arguments) interface{} { return args.Float64("float64") }, float64(2.001), nil},
+		{"float64 err", []string{"two point zero zero one"}, func(args *Arguments) interface{} { return args.Float64("float64") }, 0, errParse},
+		{"string", []string{"foobar"}, func(args *Arguments) interface{} { return args.String("string") }, "foobar", nil},
+		{"uint", []string{"5"}, func(args *Arguments) interface{} { return args.Uint("uint") }, uint(5), nil},
+		{"uint", []string{"five"}, func(args *Arguments) interface{} { return args.Uint("uint") }, 0, errParse},
+		{"uint64", []string{"6"}, func(args *Arguments) interface{} { return args.Uint64("uint64") }, uint64(6), nil},
+		{"uint64 err", []string{"six"}, func(args *Arguments) interface{} { return args.Uint64("uint64") }, 0, errParse},
+		{"varslice", []string{"1", "2", "3"}, func(args *Arguments) interface{} {
+			varSlice := []int{}
+			args.VarSlice((*intSlice)(&varSlice), "n n n n...")
+			return &varSlice
+		}, []int{1, 2, 3}, nil},
 	}
 
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			args := &Arguments{}
-			test.cb(args)
+			g := test.cb(args)
+			want := test.want
 			gotErr := args.Parse(test.input)
 			if test.wantErr != gotErr {
 				t.Errorf("want err %v got %v", test.wantErr, gotErr)
 			} else if gotErr == nil {
-				if g, ok := args.args[0].value.(getter); ok {
-					got := g.Get()
-					if !reflect.DeepEqual(test.want, got) {
-						t.Errorf("want %v got %v", test.want, got)
-					}
-
-					gotString := args.args[0].value.(fmt.Stringer).String()
-					if test.wantString != gotString {
-						t.Errorf("want string %q got %q", test.wantString, gotString)
-					}
-				} else {
-					t.Errorf("value %T does not implement getter", args.args[0].value)
+				got := reflect.ValueOf(g).Elem().Interface()
+				if !reflect.DeepEqual(want, got) {
+					t.Errorf("want %T got %T", want, got)
 				}
 			}
 		})

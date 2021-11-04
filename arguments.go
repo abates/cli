@@ -158,14 +158,71 @@ type argument struct {
 	desc  string
 }
 
-func (args *Arguments) Bool(p *bool, desc string)              { args.Var((*boolValue)(p), desc) }
-func (args *Arguments) Duration(p *time.Duration, desc string) { args.Var((*durationValue)(p), desc) }
-func (args *Arguments) Float64(p *float64, desc string)        { args.Var((*float64Value)(p), desc) }
-func (args *Arguments) Int(p *int, desc string)                { args.Var((*intValue)(p), desc) }
-func (args *Arguments) Int64(p *int64, desc string)            { args.Var((*int64Value)(p), desc) }
-func (args *Arguments) String(p *string, desc string)          { args.Var((*stringValue)(p), desc) }
-func (args *Arguments) Uint(p *uint, desc string)              { args.Var((*uintValue)(p), desc) }
-func (args *Arguments) Uint64(p *uint64, desc string)          { args.Var((*uint64Value)(p), desc) }
+func (args *Arguments) Bool(desc string) *bool {
+	p := new(bool)
+	args.BoolVar(p, desc)
+	return p
+}
+
+func (args *Arguments) BoolVar(p *bool, desc string) { args.Var((*boolValue)(p), desc) }
+
+func (args *Arguments) Duration(desc string) *time.Duration {
+	p := new(time.Duration)
+	args.DurationVar(p, desc)
+	return p
+}
+
+func (args *Arguments) DurationVar(p *time.Duration, desc string) {
+	args.Var((*durationValue)(p), desc)
+}
+
+func (args *Arguments) Float64(desc string) *float64 {
+	p := new(float64)
+	args.Float64Var(p, desc)
+	return p
+}
+
+func (args *Arguments) Float64Var(p *float64, desc string) { args.Var((*float64Value)(p), desc) }
+
+func (args *Arguments) Int(desc string) *int {
+	p := new(int)
+	args.IntVar(p, desc)
+	return p
+}
+
+func (args *Arguments) IntVar(p *int, desc string) { args.Var((*intValue)(p), desc) }
+
+func (args *Arguments) Int64(desc string) *int64 {
+	p := new(int64)
+	args.Int64Var(p, desc)
+	return p
+}
+
+func (args *Arguments) Int64Var(p *int64, desc string) { args.Var((*int64Value)(p), desc) }
+
+func (args *Arguments) String(desc string) *string {
+	p := new(string)
+	args.StringVar(p, desc)
+	return p
+}
+
+func (args *Arguments) StringVar(p *string, desc string) { args.Var((*stringValue)(p), desc) }
+
+func (args *Arguments) Uint(desc string) *uint {
+	p := new(uint)
+	args.UintVar(p, desc)
+	return p
+}
+
+func (args *Arguments) UintVar(p *uint, desc string) { args.Var((*uintValue)(p), desc) }
+
+func (args *Arguments) Uint64(desc string) *uint64 {
+	p := new(uint64)
+	args.Uint64Var(p, desc)
+	return p
+}
+
+func (args *Arguments) Uint64Var(p *uint64, desc string) { args.Var((*uint64Value)(p), desc) }
 
 func (args *Arguments) Var(value Value, desc string) {
 	args.args = append(args.args, &argument{value, desc})

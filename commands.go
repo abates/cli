@@ -63,19 +63,15 @@ type CommandFunc func(name string, args ...string) ([]string, error)
 // a Command object represents a single command in the hierarchy and is
 // a placeholder to register subcommands
 type Command struct {
-	Name          string
-	Description   string
-	Usage         string
-	Callback      CommandFunc
-	args          []string
-	SubCommands   []*Command
-	subCommand    *Command
+	Name        string
+	Description string
+	Usage       string
+	Callback    CommandFunc
+	SubCommands []*Command
+	Flags       flag.FlagSet
+
 	errorHandling ErrorHandling
-
-	output io.Writer
-
-	Arguments Arguments
-	Flags     flag.FlagSet
+	output        io.Writer
 }
 
 type Option func(*Command)
