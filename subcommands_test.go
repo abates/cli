@@ -5,29 +5,29 @@ import (
 )
 
 func TestSubCommandsGetSet(t *testing.T) {
-	sc := &subCommands{cmds: make(map[string]*Command)}
+	sc := []*Command{}
 
-	if sc.len() != 0 {
-		t.Errorf("Expected len 0 got %d", sc.len())
+	if subCommands(sc).Len() != 0 {
+		t.Errorf("Expected len 0 got %d", subCommands(sc).Len())
 	}
 
-	got := sc.get("foo")
+	got := subCommands(sc).get("foo")
 	if got != nil {
 		t.Errorf("Expected nil got %v", got)
 	}
 
-	sc.set("foo", &Command{})
-	if sc.len() != 1 {
-		t.Errorf("Expected len 1 got %d", sc.len())
+	sc = append(sc, &Command{Name: "foo"})
+	if subCommands(sc).Len() != 1 {
+		t.Errorf("Expected len 1 got %d", subCommands(sc).Len())
 	}
 
-	got = sc.get("foo")
+	got = subCommands(sc).get("foo")
 	if got == nil {
 		t.Errorf("Expected non-nil")
 	}
 
-	if sc.nameLen != len("foo") {
-		t.Errorf("Expected %d got %d", len("foo"), sc.nameLen)
+	if subCommands(sc).maxLen() != len("foo") {
+		t.Errorf("Expected %d got %d", len("foo"), subCommands(sc).maxLen())
 	}
 }
 

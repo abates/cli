@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -31,6 +32,11 @@ func numError(err error) error {
 type Value interface {
 	String() string
 	Set(string) error
+}
+
+type SliceValue interface {
+	String() string
+	Set([]string) error
 }
 
 type boolValue bool
@@ -148,9 +154,8 @@ type Arguments struct {
 }
 
 type argument struct {
-	value Value
+	value interface{}
 	desc  string
-	slice bool
 }
 
 func (args *Arguments) Bool(p *bool, desc string)              { args.Var((*boolValue)(p), desc) }
@@ -163,15 +168,21 @@ func (args *Arguments) Uint(p *uint, desc string)              { args.Var((*uint
 func (args *Arguments) Uint64(p *uint64, desc string)          { args.Var((*uint64Value)(p), desc) }
 
 func (args *Arguments) Var(value Value, desc string) {
-	args.args = append(args.args, &argument{value, desc, false})
+	args.args = append(args.args, &argument{value, desc})
 }
 
-func (args *Arguments) VarSlice(value Value, desc string) {
-	args.args = append(args.args, &argument{value, desc, true})
+func (args *Arguments) VarSlice(value SliceValue, desc string) {
+	args.args = append(args.args, &argument{value, desc})
 }
 
-func (args *Arguments) Len() int       { return len(args.args) }
-func (args *Arguments) Args() []string { return args.input[len(args.args):] }
+func (args *Arguments) Len() int { return len(args.args) }
+
+func (args *Arguments) Args() []string {
+	if len(args.input) > len(args.args) {
+		return args.input[len(args.args):]
+	}
+	return []string{}
+}
 
 func (args *Arguments) Parse(input []string) error {
 	if len(input) < len(args.args) {
@@ -179,19 +190,15 @@ func (args *Arguments) Parse(input []string) error {
 	}
 	args.input = input
 	for i, arg := range args.args {
-		if arg.slice {
-			for ; i < len(args.input); i++ {
-				err := arg.value.Set(input[i])
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		} else {
-			err := arg.value.Set(input[i])
+		if s, ok := arg.value.(SliceValue); ok {
+			return s.Set(input[i:len(args.input)])
+		} else if s, ok := arg.value.(Value); ok {
+			err := s.Set(input[i])
 			if err != nil {
 				return err
 			}
+		} else {
+			panic(fmt.Sprintf("huh? value should have been Value or SliceValue got %T", arg.value))
 		}
 	}
 	return nil

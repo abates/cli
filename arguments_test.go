@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 	"strconv"
@@ -15,12 +16,16 @@ type getter interface {
 
 type intSlice []int
 
-func (il *intSlice) Set(str string) error {
-	v, err := strconv.Atoi(str)
-	if err == nil {
-		*il = append(*il, v)
+func (il *intSlice) Set(str []string) error {
+	for _, s := range str {
+		v, err := strconv.Atoi(s)
+		if err == nil {
+			*il = append(*il, v)
+		} else {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 func (il *intSlice) Get() interface{} {
@@ -34,6 +39,18 @@ func (il *intSlice) String() string {
 	}
 	return strings.Join(list, ",")
 }
+
+// this is a non-sensical type since it's methods don't
+// have a pointer receiver. This is strictly for testing
+// stupid input
+type byteslice []byte
+
+func (b byteslice) Set(str string) error {
+	b = []byte(str)
+	return nil
+}
+
+func (b byteslice) String() string { return string(b) }
 
 func TestArguments(t *testing.T) {
 	var b bool
@@ -87,7 +104,7 @@ func TestArguments(t *testing.T) {
 						t.Errorf("want %v got %v", test.want, got)
 					}
 
-					gotString := args.args[0].value.String()
+					gotString := args.args[0].value.(fmt.Stringer).String()
 					if test.wantString != gotString {
 						t.Errorf("want string %q got %q", test.wantString, gotString)
 					}

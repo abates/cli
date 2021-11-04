@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"strings"
-	"time"
 )
 
 var (
@@ -55,7 +53,7 @@ func (ind *indenter) Indentf(format string, a ...interface{}) {
 // CommandFunc is the callback function that will be executed when a
 // command is called. If the CommandFunc returns a non-nil error
 // then processing stops immediately
-type CommandFunc func(name string) error
+type CommandFunc func(name string, args ...string) ([]string, error)
 
 // Command represents a single cli command. The idea is that a cli app
 // is run such as:
@@ -65,13 +63,13 @@ type CommandFunc func(name string) error
 // a Command object represents a single command in the hierarchy and is
 // a placeholder to register subcommands
 type Command struct {
-	name          string
-	usageStr      string
-	description   string
-	callback      CommandFunc
+	Name          string
+	Description   string
+	Usage         string
+	Callback      CommandFunc
 	args          []string
+	SubCommands   []*Command
 	subCommand    *Command
-	subCommands   subCommands
 	errorHandling ErrorHandling
 
 	output io.Writer
@@ -82,80 +80,14 @@ type Command struct {
 
 type Option func(*Command)
 
-func UsageOption(usageStr string) Option { return func(cmd *Command) { cmd.usageStr = usageStr } }
+func UsageOption(usageStr string) Option { return func(cmd *Command) { cmd.Usage = usageStr } }
 
 func DescOption(description string) Option {
-	return func(cmd *Command) { cmd.description = description }
+	return func(cmd *Command) { cmd.Description = description }
 }
 
 func CallbackOption(callback CommandFunc) Option {
-	return func(cmd *Command) { cmd.callback = callback }
-}
-
-func ArgCallbackOption(cb interface{}) Option {
-	v := reflect.ValueOf(cb)
-	if v.Kind() != reflect.Func {
-		panic("Can only callback func types")
-	}
-
-	return func(cmd *Command) {
-		//variables := []reflect.Value{}
-		variables := []interface{}{}
-		t := reflect.TypeOf(cb)
-		for i := 0; i < t.NumIn(); i++ {
-			switch t.In(i) {
-			case reflect.TypeOf(false):
-				var b bool
-				cmd.Arguments.Bool(&b, "")
-				variables = append(variables, &b)
-			case reflect.TypeOf(time.Duration(0)):
-				var d time.Duration
-				cmd.Arguments.Duration(&d, "")
-				variables = append(variables, &d)
-			case reflect.TypeOf(float64(0)):
-				var f float64
-				cmd.Arguments.Float64(&f, "")
-				variables = append(variables, &f)
-			case reflect.TypeOf(int(0)):
-				var i int
-				cmd.Arguments.Int(&i, "")
-				variables = append(variables, &i)
-			case reflect.TypeOf(int64(0)):
-				var i int64
-				cmd.Arguments.Int64(&i, "")
-				variables = append(variables, &i)
-			case reflect.TypeOf(""):
-				var s string
-				cmd.Arguments.String(&s, "")
-				variables = append(variables, &s)
-			case reflect.TypeOf(uint(0)):
-				var u uint
-				cmd.Arguments.Uint(&u, "")
-				variables = append(variables, &u)
-			case reflect.TypeOf(uint64(0)):
-				var u uint64
-				cmd.Arguments.Uint64(&u, "")
-				variables = append(variables, &u)
-			}
-		}
-
-		cmd.callback = func(string) error {
-			values := []reflect.Value{}
-			for _, v := range variables {
-				values = append(values, reflect.Indirect(reflect.ValueOf(v)))
-			}
-			ret := v.Call(values)
-			if len(ret) > 0 {
-				if ret[len(ret)-1].CanInterface() {
-					i := ret[len(ret)-1].Interface()
-					if err, ok := i.(error); ok {
-						return err
-					}
-				}
-			}
-			return nil
-		}
-	}
+	return func(cmd *Command) { cmd.Callback = callback }
 }
 
 func OutputOption(output io.Writer) Option { return func(cmd *Command) { cmd.SetOutput(output) } }
@@ -168,10 +100,9 @@ func ErrorHandlingOption(errorHandling ErrorHandling) Option {
 // to the supplied command options
 func New(name string, options ...Option) *Command {
 	cmd := &Command{
-		name:          name,
+		Name:          name,
 		output:        os.Stderr,
 		errorHandling: ExitOnError,
-		subCommands:   subCommands{cmds: make(map[string]*Command)},
 	}
 
 	for _, option := range options {
@@ -183,9 +114,13 @@ func New(name string, options ...Option) *Command {
 
 // SubCommand adds a subcommand to the current command hierarchy
 func (cmd *Command) SubCommand(name string, options ...Option) *Command {
-	subCommand := New(name, options...)
+	subCommand := New(name)
 	subCommand.Flags.SetOutput(cmd.output)
-	cmd.subCommands.set(name, subCommand)
+	subCommand.errorHandling = cmd.errorHandling
+	for _, option := range options {
+		option(subCommand)
+	}
+	cmd.SubCommands = append(cmd.SubCommands, subCommand)
 	return subCommand
 }
 
@@ -200,15 +135,15 @@ func (cmd *Command) usage(ind *indenter) {
 	cmd.Flags.VisitAll(func(*flag.Flag) { numFlags++ })
 
 	if ind.count == 0 {
-		ind.Indentf("Usage: %s", cmd.name)
-		if cmd.usageStr != "" {
-			ind.Printf(" %s\n", cmd.usageStr)
+		ind.Indentf("Usage: %s", cmd.Name)
+		if cmd.Usage != "" {
+			ind.Printf(" %s\n", cmd.Usage)
 		} else {
 			if numFlags > 0 {
 				ind.Print(" [global options]")
 			}
 
-			if cmd.subCommands.len() > 0 {
+			if len(cmd.SubCommands) > 0 {
 				ind.Printf(" <command> [command options]\n")
 			} else {
 				ind.Println()
@@ -226,32 +161,33 @@ func (cmd *Command) usage(ind *indenter) {
 		}
 	}
 
-	if cmd.subCommands.len() > 0 {
+	if len(cmd.SubCommands) > 0 {
 		ind.Indentln("Commands:")
-		nameFmt := fmt.Sprintf("%%-%ds", cmd.subCommands.nameLen)
+		nameFmt := fmt.Sprintf("%%-%ds", subCommands(cmd.SubCommands).maxLen())
 		var prevCmd *Command
-		cmd.subCommands.visitAll(func(command *Command) {
-			if prevCmd != nil && prevCmd.subCommands.len() == 0 && command.subCommands.len() > 0 {
+		subCommands(cmd.SubCommands).sort()
+		for _, command := range cmd.SubCommands {
+			if prevCmd != nil && len(prevCmd.SubCommands) == 0 && len(command.SubCommands) > 0 {
 				ind.Println()
 			}
 
-			ind.Indentf(nameFmt, command.name)
-			if command.usageStr == "" {
-				if command.description != "" {
-					ind.Printf(" %s\n", command.description)
+			ind.Indentf(nameFmt, command.Name)
+			if command.Usage == "" {
+				if command.Description != "" {
+					ind.Printf(" %s\n", command.Description)
 				} else {
 					ind.Println()
 				}
 			} else {
-				ind.Printf(" %s\n", command.usageStr)
-				if command.description != "" {
-					ind.Indentf("%s %s\n", strings.Repeat(" ", cmd.subCommands.nameLen), command.description)
+				ind.Printf(" %s\n", command.Usage)
+				if command.Description != "" {
+					ind.Indentf("%s %s\n", strings.Repeat(" ", subCommands(cmd.SubCommands).maxLen()), command.Description)
 				}
 			}
 
-			command.usage(&indenter{writer: ind.writer, count: ind.count + cmd.subCommands.nameLen})
+			command.usage(&indenter{writer: ind.writer, count: ind.count + subCommands(cmd.SubCommands).maxLen()})
 			prevCmd = command
-		})
+		}
 		ind.Println()
 	}
 }
@@ -270,49 +206,45 @@ func (cmd *Command) handleErr(err error) error {
 	return err
 }
 
-// Parse the arguments and make them ready to run
-func (cmd *Command) Parse(args []string) (err error) {
-	cmd.Flags.Parse(args)
-	cmd.args = cmd.Flags.Args()
-
-	if cmd.Arguments.Len() > 0 {
-		err = cmd.handleErr(cmd.Arguments.Parse(cmd.args))
-		cmd.args = cmd.Arguments.Args()
+// Run the command.
+func (cmd *Command) runCallback(args []string) ([]string, error) {
+	if cmd.Callback == nil {
+		return args, ErrNoCommandFunc
 	}
-
-	if cmd.subCommands.len() > 0 {
-		if len(cmd.args) < 1 {
-			err = cmd.handleErr(ErrRequiredCommand)
-		}
-
-		if err == nil {
-			cmdName := cmd.args[0]
-			cmd.args = cmd.args[1:]
-			cmd.subCommand = cmd.subCommands.get(cmdName)
-			if cmd.subCommand == nil {
-				err = cmd.handleErr(ErrUnknownCommand)
-			} else {
-				cmd.subCommand.Parse(cmd.args)
-			}
-		}
-	}
-	return err
+	return cmd.Callback(cmd.Name, args...)
 }
 
-// Run the command.
-func (cmd *Command) Run() (err error) {
-	if cmd.callback == nil {
-		if cmd.subCommand == nil {
-			err = ErrNoCommandFunc
+func (cmd *Command) runSubcommand(args []string) ([]string, error) {
+	var err error
+	if len(cmd.SubCommands) > 0 {
+		if len(args) < 1 {
+			err = ErrRequiredCommand
 		} else {
-			err = cmd.subCommand.Run()
+			subCmdName := args[0]
+			subCmdArgs := args[1:]
+			subCmd := subCommands(cmd.SubCommands).get(subCmdName)
+			if subCmd == nil {
+				err = ErrUnknownCommand
+			} else {
+				args, err = subCmd.Run(subCmdArgs)
+			}
 		}
 	} else {
-		err = cmd.callback(cmd.name)
-		if err == nil && cmd.subCommand != nil {
-			err = cmd.subCommand.Run()
+		err = ErrNoCommandFunc
+	}
+	return args, err
+}
+
+func (cmd *Command) Run(args []string) ([]string, error) {
+	err := cmd.Flags.Parse(args)
+	if err == nil {
+		args = cmd.Flags.Args()
+		args, err = cmd.runCallback(args)
+
+		if err == nil || errors.Is(err, ErrNoCommandFunc) {
+			args, err = cmd.runSubcommand(args)
 		}
 	}
 
-	return err
+	return args, cmd.handleErr(err)
 }
