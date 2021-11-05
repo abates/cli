@@ -220,7 +220,7 @@ func (cmd *Command) runSubcommand(args []string) ([]string, error) {
 			subCmdArgs := args[1:]
 			subCmd := subCommands(cmd.SubCommands).get(subCmdName)
 			if subCmd == nil {
-				err = ErrUnknownCommand
+				err = fmt.Errorf("%w %s", ErrUnknownCommand, subCmdName)
 			} else {
 				args, err = subCmd.Run(subCmdArgs)
 			}
