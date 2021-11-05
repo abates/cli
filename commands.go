@@ -192,6 +192,9 @@ func (cmd *Command) handleErr(err error) error {
 	if err != nil {
 		if cmd.errorHandling == ExitOnError {
 			ind := &indenter{writer: cmd.output}
+			if cmd.output == nil {
+				ind.writer = os.Stderr
+			}
 			ind.Printf("%v\n", err)
 			cmd.usage(ind)
 			os.Exit(2)
@@ -237,7 +240,7 @@ func (cmd *Command) Run(args []string) ([]string, error) {
 		args = cmd.Flags.Args()
 		args, err = cmd.runCallback(args)
 
-		if err == nil || errors.Is(err, ErrNoCommandFunc) {
+		if len(args) > 0 && (err == nil || errors.Is(err, ErrNoCommandFunc)) {
 			args, err = cmd.runSubcommand(args)
 		}
 	}
