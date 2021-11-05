@@ -31,31 +31,35 @@ func TestSubCommandsGetSet(t *testing.T) {
 	}
 }
 
-/*func TestSubCommandsUsage(t *testing.T) {
+func TestSubCommandsGet(t *testing.T) {
 	tests := []struct {
-		desc string
-		cmds []*Command
-		want string
+		name   string
+		input  []string
+		lookup string
+		found  bool
 	}{
-		{"single command", []*Command{{name: "foo"}}, "Commands:\nfoo\n\n"},
-		{"single command (description)", []*Command{{name: "foo", description: "bar"}}, "Commands:\nfoo bar\n\n"},
-		{"single command (usage)", []*Command{{name: "foo", usageStr: "bar"}}, "Commands:\nfoo bar\n\n"},
-		{"single command (usage, description)", []*Command{{name: "foo", usageStr: "bar", description: "foobar"}}, "Commands:\nfoo bar\n    foobar\n\n"},
+		{"single item", []string{"one"}, "one", true},
+		{"two items", []string{"one", "two"}, "one", true},
+		{"three items", []string{"one", "two", "three"}, "two", true},
+		{"three items again", []string{"one", "two", "three"}, "three", true},
+		{"three items finally", []string{"two", "one", "three"}, "one", true},
 	}
 
 	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			sc := &subCommands{cmds: make(map[string]*Command)}
-			for _, cmd := range test.cmds {
-				sc.set(cmd.name, cmd)
+		t.Run(test.name, func(t *testing.T) {
+			commands := []*Command{}
+			for _, input := range test.input {
+				commands = append(commands, &Command{Name: input})
 			}
 
-			builder := &strings.Builder{}
-			sc.usage(&indenter{writer: builder})
-			got := builder.String()
-			if test.want != got {
-				t.Errorf("want string %q got %q", test.want, got)
+			c := subCommands(commands).get(test.lookup)
+			if (c == nil) == test.found {
+				t.Errorf("Wanted found to be %v got %v", test.found, c == nil)
+			}
+
+			if c != nil && c.Name != test.lookup {
+				t.Errorf("Expecting name to be %q got %q", test.lookup, c.Name)
 			}
 		})
 	}
-}*/
+}

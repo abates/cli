@@ -5,7 +5,7 @@ import "sort"
 type subCommands []*Command
 
 func (s subCommands) Len() int           { return len(s) }
-func (s subCommands) Less(i, j int) bool { return len(s[i].Name) < len(s[j].Name) }
+func (s subCommands) Less(i, j int) bool { return s[i].Name < s[j].Name }
 func (s subCommands) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func (s subCommands) maxLen() int {
