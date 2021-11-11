@@ -124,6 +124,10 @@ func TestCommandRun(t *testing.T) {
 			c.Callback = func(string, ...string) ([]string, error) { return []string{"foo"}, nil }
 			c.SubCommand("foo")
 		}, []string{"foo"}, ErrNoCommandFunc},
+		{"callback with subcommand no command", func(c *Command) {
+			c.Callback = Callback(func() { return })
+			c = c.SubCommand("foo", CallbackOption(Callback(func() { return })))
+		}, []string{}, ErrRequiredCommand},
 	}
 
 	for _, test := range tests {

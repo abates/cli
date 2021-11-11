@@ -242,7 +242,7 @@ func (cmd *Command) Run(args []string) ([]string, error) {
 		args = cmd.Flags.Args()
 		args, err = cmd.runCallback(args)
 
-		if len(args) > 0 && (err == nil || errors.Is(err, ErrNoCommandFunc)) {
+		if len(cmd.SubCommands) > 0 && (err == nil || errors.Is(err, ErrNoCommandFunc)) {
 			args, err = cmd.runSubcommand(args)
 		}
 	}
