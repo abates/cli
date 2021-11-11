@@ -12,7 +12,7 @@ import (
 var (
 	ErrUnknownCommand  = errors.New("Unknown command")
 	ErrRequiredCommand = errors.New("A command is required")
-	ErrNoCommandFunc   = errors.New("No callback function was provided for the command")
+	ErrNoCommandFunc   = errors.New("No callback function was provided")
 )
 
 type ErrorHandling int
@@ -196,7 +196,9 @@ func (cmd *Command) handleErr(err error) error {
 				ind.writer = os.Stderr
 			}
 			ind.Printf("%v\n", err)
-			cmd.usage(ind)
+			if errors.Is(err, ErrUnknownCommand) || errors.Is(err, ErrRequiredCommand) || errors.Is(err, ErrNoCommandFunc) {
+				cmd.usage(ind)
+			}
 			os.Exit(2)
 		} else if cmd.errorHandling == PanicOnError {
 			panic(err)
@@ -229,7 +231,7 @@ func (cmd *Command) runSubcommand(args []string) ([]string, error) {
 			}
 		}
 	} else {
-		err = ErrNoCommandFunc
+		err = fmt.Errorf("%w for %s", ErrNoCommandFunc, args[0])
 	}
 	return args, err
 }

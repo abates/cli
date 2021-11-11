@@ -235,20 +235,21 @@ func (args *Arguments) VarSlice(value SliceValue, desc string) {
 func (args *Arguments) Len() int { return len(args.args) }
 
 func (args *Arguments) Args() []string {
-	if len(args.input) > len(args.args) {
+	/*if len(args.input) > len(args.args) {
 		return args.input[len(args.args):]
 	}
-	return []string{}
+	return []string{}*/
+	return args.input
 }
 
 func (args *Arguments) Parse(input []string) error {
 	if len(input) < len(args.args) {
 		return errNumArguments
 	}
-	args.input = input
+	args.input = []string{}
 	for i, arg := range args.args {
 		if s, ok := arg.value.(SliceValue); ok {
-			return s.Set(input[i:len(args.input)])
+			return s.Set(input[i:len(input)])
 		} else if s, ok := arg.value.(Value); ok {
 			err := s.Set(input[i])
 			if err != nil {
@@ -258,6 +259,7 @@ func (args *Arguments) Parse(input []string) error {
 			panic(fmt.Sprintf("huh? value should have been Value or SliceValue got %T", arg.value))
 		}
 	}
+	args.input = input[len(args.args):]
 	return nil
 }
 
