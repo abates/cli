@@ -215,6 +215,14 @@ func (cmd *Command) runCallback(args []string) ([]string, error) {
 	return cmd.Callback(cmd.Name, args...)
 }
 
+func (cmd *Command) Lookup(name string) (subcmd *Command, found bool) {
+	subcmd = subCommands(cmd.SubCommands).get(name)
+	if subcmd != nil {
+		found = true
+	}
+	return
+}
+
 func (cmd *Command) runSubcommand(args []string) ([]string, error) {
 	var err error
 	if len(cmd.SubCommands) > 0 {
@@ -223,8 +231,8 @@ func (cmd *Command) runSubcommand(args []string) ([]string, error) {
 		} else {
 			subCmdName := args[0]
 			subCmdArgs := args[1:]
-			subCmd := subCommands(cmd.SubCommands).get(subCmdName)
-			if subCmd == nil {
+			subCmd, found := cmd.Lookup(subCmdName)
+			if !found {
 				err = fmt.Errorf("%w %q", ErrUnknownCommand, subCmdName)
 			} else {
 				args, err = subCmd.Run(subCmdArgs)
