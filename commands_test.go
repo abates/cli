@@ -18,7 +18,7 @@ func TestOptions(t *testing.T) {
 		option Option
 		want   *Command
 	}{
-		{"UsageOption", UsageOption("useless usage"), &Command{Usage: "useless usage", output: os.Stderr}},
+		{"UsageOption", UsageOption("useless usage"), &Command{UsageStr: "useless usage", output: os.Stderr}},
 		{"DescOption", DescOption("useless description"), &Command{Description: "useless description", output: os.Stderr}},
 		{"CallbackOption", CallbackOption(cb), &Command{Callback: cb, output: os.Stderr}},
 		{"OutputOption", OutputOption(os.Stdout), &Command{output: os.Stdout}},
@@ -86,7 +86,7 @@ func TestCommandUsage(t *testing.T) {
 		setup func(*Command)
 		want  string
 	}{
-		{"usage str", func(cmd *Command) { cmd.Usage = "foobar" }, "Usage: usage str foobar\n"},
+		{"usage str", func(cmd *Command) { cmd.UsageStr = "foobar" }, "Usage: usage str foobar\n"},
 		{"no flags", func(*Command) {}, "Usage: no flags\n"},
 		{"one flag", func(cmd *Command) { cmd.Flags.Var(&testValue{}, "foo", "bar") }, "Usage: one flag [global options]\n  -foo value\n    \tbar\n\n"},
 		{"subcommand", func(cmd *Command) { cmd.SubCommand("foo") }, "Usage: subcommand <command> [command options]\nCommands:\nfoo\n\n"},

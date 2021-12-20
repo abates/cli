@@ -65,7 +65,7 @@ type CommandFunc func(name string, args ...string) ([]string, error)
 type Command struct {
 	Name        string
 	Description string
-	Usage       string
+	UsageStr    string
 	Callback    CommandFunc
 	SubCommands []*Command
 	Flags       flag.FlagSet
@@ -76,7 +76,7 @@ type Command struct {
 
 type Option func(*Command)
 
-func UsageOption(usageStr string) Option { return func(cmd *Command) { cmd.Usage = usageStr } }
+func UsageOption(usageStr string) Option { return func(cmd *Command) { cmd.UsageStr = usageStr } }
 
 func DescOption(description string) Option {
 	return func(cmd *Command) { cmd.Description = description }
@@ -125,6 +125,14 @@ func (cmd *Command) SetOutput(writer io.Writer) {
 	cmd.output = writer
 }
 
+func (cmd *Command) Usage() {
+	ind := &indenter{writer: cmd.output}
+	if ind.writer == nil {
+		ind.writer = os.Stderr
+	}
+	cmd.usage(ind)
+}
+
 func (cmd *Command) usage(ind *indenter) {
 	// count the number of flags that have been created
 	numFlags := 0
@@ -132,8 +140,8 @@ func (cmd *Command) usage(ind *indenter) {
 
 	if ind.count == 0 {
 		ind.Indentf("Usage: %s", cmd.Name)
-		if cmd.Usage != "" {
-			ind.Printf(" %s\n", cmd.Usage)
+		if cmd.UsageStr != "" {
+			ind.Printf(" %s\n", cmd.UsageStr)
 		} else {
 			if numFlags > 0 {
 				ind.Print(" [global options]")
@@ -168,14 +176,14 @@ func (cmd *Command) usage(ind *indenter) {
 			}
 
 			ind.Indentf(nameFmt, command.Name)
-			if command.Usage == "" {
+			if command.UsageStr == "" {
 				if command.Description != "" {
 					ind.Printf(" %s\n", command.Description)
 				} else {
 					ind.Println()
 				}
 			} else {
-				ind.Printf(" %s\n", command.Usage)
+				ind.Printf(" %s\n", command.UsageStr)
 				if command.Description != "" {
 					ind.Indentf("%s %s\n", strings.Repeat(" ", subCommands(cmd.SubCommands).maxLen()), command.Description)
 				}
