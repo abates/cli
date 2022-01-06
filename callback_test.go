@@ -40,7 +40,7 @@ func TestCallback(t *testing.T) {
 		{"no func", "hello world", []string{"true"}, "Provided callback is not a function"},
 		{"int slice", func(i *intSlice) error { return fmt.Errorf("%v", i.String()) }, []string{"1", "2", "3", "4", "5"}, "1,2,3,4,5"},
 		{"two values", func(a, b int) error { return fmt.Errorf("%d %d", a, b) }, []string{"1", "2"}, "1 2"},
-		{"two expected one received", func(a, b int) error { return fmt.Errorf("%d %d", a, b) }, []string{"1"}, "not enough arguments given"},
+		{"two expected one received", func(a, b int) error { return fmt.Errorf("%d %d", a, b) }, []string{"1"}, "Invalid Usage not enough arguments given"},
 		{"non-value argument", func(a time.Time) error { return nil }, []string{"1"}, "time.Time must implement either Value or ValueSlice interfaces"},
 	}
 

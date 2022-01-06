@@ -2,12 +2,10 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestOptions(t *testing.T) {
@@ -37,44 +35,6 @@ func TestOptions(t *testing.T) {
 				if !reflect.DeepEqual(test.want, got) {
 					t.Errorf("want cmd %+v got %+v", test.want, got)
 				}
-			}
-		})
-	}
-}
-
-func TestArgCallbackOption(t *testing.T) {
-	tests := []struct {
-		desc    string
-		cb      CommandFunc
-		input   []string
-		wantErr string
-	}{
-		{"bool", Callback(func(b bool) error { return fmt.Errorf("%v", b) }), []string{"true"}, "true"},
-		{"bool (parse error)", Callback(func(b bool) error { return fmt.Errorf("%v", b) }), []string{"yo"}, "parse error"},
-		{"duration", Callback(func(d time.Duration) error { return fmt.Errorf("%v", d) }), []string{"1s"}, "1s"},
-		{"float64", Callback(func(f float64) error { return fmt.Errorf("%v", f) }), []string{"1.234"}, "1.234"},
-		{"int", Callback(func(i int) error { return fmt.Errorf("%v", i) }), []string{"4234"}, "4234"},
-		{"int64", Callback(func(i int64) error { return fmt.Errorf("%v", i) }), []string{"934"}, "934"},
-		{"string", Callback(func(s string) error { return fmt.Errorf("%v", s) }), []string{"foo"}, "foo"},
-		{"uint", Callback(func(u uint) error { return fmt.Errorf("%v", u) }), []string{"1234"}, "1234"},
-		{"uint64", Callback(func(u uint64) error { return fmt.Errorf("%v", u) }), []string{"1234"}, "1234"},
-		{"value", Callback(func(b *boolValue) error { return fmt.Errorf("%v", b.String()) }), []string{"true"}, "true"},
-		{"bool/no pointer", Callback(func(b boolValue) error { return fmt.Errorf("%v", b.String()) }), []string{"true"}, "true"},
-		{"no func", Callback("hello world"), []string{"true"}, "Provided callback is not a function"},
-		{"int slice", Callback(func(i *intSlice) error { return fmt.Errorf("%v", i.String()) }), []string{"1", "2", "3", "4", "5"}, "1,2,3,4,5"},
-		{"two values", Callback(func(a, b int) error { return fmt.Errorf("%d %d", a, b) }), []string{"1", "2"}, "1 2"},
-		{"two expected one received", Callback(func(a, b int) error { return fmt.Errorf("%d %d", a, b) }), []string{"1"}, "not enough arguments given"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			cmd := New("", ErrorHandlingOption(ContinueOnError))
-			cmd.Callback = test.cb
-			_, err := cmd.Run(test.input)
-			if err == nil {
-				t.Errorf("Expected error")
-			} else if err.Error() != test.wantErr {
-				t.Errorf("Wanted error %s got %s", test.wantErr, err.Error())
 			}
 		})
 	}

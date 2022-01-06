@@ -9,13 +9,6 @@ import (
 	"strings"
 )
 
-var (
-	ErrUsage           = errors.New("Invalid Usage")
-	ErrUnknownCommand  = errors.New("Unknown command")
-	ErrRequiredCommand = errors.New("A command is required")
-	ErrNoCommandFunc   = errors.New("No callback function was provided")
-)
-
 type ErrorHandling int
 
 const (
@@ -205,7 +198,7 @@ func (cmd *Command) handleErr(err error) error {
 				ind.writer = os.Stderr
 			}
 			ind.Printf("%v\n", err)
-			if errors.Is(err, ErrUnknownCommand) || errors.Is(err, ErrRequiredCommand) || errors.Is(err, ErrNoCommandFunc) || errors.Is(err, ErrUsage) {
+			if errors.Is(err, ErrUsage) {
 				cmd.usage(ind)
 			}
 			os.Exit(2)

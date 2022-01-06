@@ -1,33 +1,12 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"time"
 )
-
-var (
-	errParse        = errors.New("parse error")
-	errRange        = errors.New("value out of range")
-	errNumArguments = errors.New("not enough arguments given")
-)
-
-func numError(err error) error {
-	ne, ok := err.(*strconv.NumError)
-	if !ok {
-		return err
-	}
-	if ne.Err == strconv.ErrSyntax {
-		return errParse
-	}
-	if ne.Err == strconv.ErrRange {
-		return errRange
-	}
-	return ne.Err
-}
 
 type Value interface {
 	String() string
